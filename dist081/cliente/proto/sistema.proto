@@ -1,0 +1,219 @@
+syntax = "proto3";
+option go_package = "grpc-server/proto";
+package sistema;
+
+// Servicio para el matchmaker
+service Matchmaker {
+  // Método para unirse a la cola de emparejamiento
+  rpc QueuePlayer (PlayerInfoRequest) returns (QueuePlayerResponse) {}
+  
+  // Método para consultar el estado actual del jugador
+  rpc GetPlayerStatus (PlayerStatusRequest) returns (PlayerStatusResponse) {}
+  
+  // Método para sincronizar relojes vectoriales (mantener consistencia eventual)
+  rpc SincronizarReloj (SincronizacionRequest) returns (SincronizacionResponse) {}
+}
+
+// Mensaje para solicitar unirse a la cola
+message PlayerInfoRequest {
+  string player_id = 1;
+  string game_mode_preference = 2;
+  map<string, int32> reloj_vectorial = 3; // Incluir reloj vectorial
+}
+
+// Mensaje de respuesta al unirse a cola
+message QueuePlayerResponse {
+  int32 status_code = 1; // 0 = éxito, otro valor = fallo
+  string message = 2;
+  map<string, int32> reloj_vectorial = 3; // Incluir reloj vectorial
+  string partida_id = 4; // ID de la partida asignada
+}
+
+// Mensaje para solicitar estado del jugador
+message PlayerStatusRequest {
+  string player_id = 1;
+  map<string, int32> reloj_vectorial = 2; // Incluir reloj vectorial
+}
+
+// Mensaje de respuesta con estado del jugador
+message PlayerStatusResponse {
+  string player_status = 1; // "IDLE", "IN_QUEUE", "IN_MATCH", "MATCH_COMPLETED"
+  string partida_id = 2;    // ID de la partida si está en una
+  repeated Partida partidas = 3; // Lista de partidas (para consultas de estado)
+  map<string, int32> reloj_vectorial = 4; // Incluir reloj vectorial
+  string mensaje = 5; // Mensaje informativo adicional
+  string ganador = 6; // Si ha ganado
+  string perdedor = 7; // Si ha perdido
+}
+
+// Mensaje para sincronización de relojes
+message SincronizacionRequest {
+  string id_cliente = 1;
+  map<string, int32> reloj_vectorial = 2;
+}
+
+// Respuesta de sincronización
+message SincronizacionResponse {
+  map<string, int32> reloj_vectorial = 1;
+  bool exito = 2;
+}
+
+// Mensaje para representar una partida
+message Partida {
+  string id = 1;
+  repeated string clientes = 2;
+  bool llena = 3;
+  string estado = 4; // Estado de la partida (Esperando, En curso, Finalizada)
+  string ganador = 5; // Ganador de la partida (si está finalizada)
+  string perdedor = 6; // Perdedor de la partida (si está finalizada)
+  string servidor_id = 7; // Añadir campo para el ID del servidor
+}
+
+// Añade estas definiciones a sistema.proto para mantener compatibilidad
+message ConexionRequest {
+  string mensaje = 1;
+  map<string, int32> reloj_vectorial = 2;
+}
+
+message ConexionResponse {
+  string mensaje = 1;
+  bool exito = 2;
+  map<string, int32> reloj_vectorial = 3;
+  repeated Partida partidas = 4;
+  string partida_id = 5;
+}
+
+// Servicios que expone el servidor de partidas como servidor gRPC
+service PartidaService {
+  // Invocado por el Matchmaker para iniciar una partida
+  rpc AssignMatch (AssignMatchRequest) returns (AssignMatchResponse) {}
+  
+  // Otros métodos del servidor de partidas pueden estar aquí
+  rpc ObtenerEstadoPartida (EstadoPartidaRequest) returns (EstadoPartidaResponse) {}
+}
+
+// Servicios que el Matchmaker expone para el servidor de partidas
+service MatchmakerService {
+  // Actualizar el estado del servidor de partidas
+  rpc UpdateServerStatus (ServerStatusUpdateRequest) returns (ServerStatusUpdateResponse) {}
+  
+  // Añadir este método al servicio MatchmakerService
+  rpc NotifyMatchResult (MatchResultNotification) returns (MatchResultResponse) {}
+}
+
+// Solicitud para asignar una partida
+message AssignMatchRequest {
+  string match_id = 1;
+  repeated string player_ids = 2;
+  map<string, int32> reloj_vectorial = 3;
+}
+
+// Respuesta a la asignación de partida
+message AssignMatchResponse {
+  int32 status_code = 1; // 0 = éxito, otro valor = fallo
+  string message = 2;
+  map<string, int32> reloj_vectorial = 3;
+}
+
+message EstadoPartidaRequest {
+  string partida_id = 1;
+  map<string, int32> reloj_vectorial = 2;
+}
+
+message EstadoPartidaResponse {
+  bool encontrada = 1;
+  string partida_id = 2;
+  string jugador1 = 3;
+  string jugador2 = 4;
+  string estado = 5;
+  string ganador = 6;
+  string mensaje = 7;
+  map<string, int32> reloj_vectorial = 8;
+}
+
+// Solicitud para actualizar el estado del servidor
+message ServerStatusUpdateRequest {
+  string server_id = 1;
+  string status = 2;   // "DISPONIBLE", "OCUPADO", "CAIDO"
+  string address = 3;  // IP:puerto del servidor de partidas
+  map<string, int32> reloj_vectorial = 4;
+}
+
+// Respuesta a la actualización de estado
+message ServerStatusUpdateResponse {
+  int32 status_code = 1; // 0 = éxito, otro valor = fallo
+  string message = 2;
+  map<string, int32> reloj_vectorial = 3;
+}
+
+// Notificación del resultado de una partida
+message MatchResultNotification {
+  string match_id = 1;
+  string winner_id = 2;
+  string loser_id = 3;
+  string server_id = 4;
+  map<string, int32> reloj_vectorial = 5;
+}
+
+// Respuesta a la notificación del resultado
+message MatchResultResponse {
+  int32 status_code = 1; // 0 = éxito, otro valor = fallo
+  string message = 2;
+  map<string, int32> reloj_vectorial = 3;
+}
+
+// Servicio de administración para el matchmaker
+service AdminService {
+  // Obtener una vista completa del estado del sistema
+  rpc AdminGetSystemStatus(AdminRequest) returns (SystemStatusResponse) {}
+  
+  // Modificar el estado de un servidor
+  rpc AdminUpdateServerState(AdminServerUpdateRequest) returns (AdminUpdateResponse) {}
+}
+
+// Solicitud del administrador
+message AdminRequest {
+  string admin_id = 1;
+  map<string, int32> reloj_vectorial = 2;
+}
+
+// Respuesta con el estado completo del sistema
+message SystemStatusResponse {
+  repeated ServerStatus servers = 1;
+  repeated QueueInfo queue_players = 2;
+  repeated Partida active_games = 3;
+  map<string, int32> reloj_vectorial = 4;
+  int32 status_code = 5;
+  string message = 6;
+}
+
+// Información de un servidor
+message ServerStatus {
+  string server_id = 1;
+  string status = 2;
+  string address = 3;
+  int64 last_update = 4;  // timestamp de última actualización
+  string active_match_id = 5;
+}
+
+// Información de un jugador en cola
+message QueueInfo {
+  string player_id = 1;
+  int64 join_time = 2;  // timestamp de unión a la cola
+  int32 position = 3;   // posición en la cola
+}
+
+// Solicitud para actualizar el estado de un servidor
+message AdminServerUpdateRequest {
+  string admin_id = 1;
+  string server_id = 2;
+  string new_status = 3;  // "DISPONIBLE", "OCUPADO", "CAIDO", "RESET"
+  map<string, int32> reloj_vectorial = 4;
+}
+
+// Respuesta a la solicitud de actualización
+message AdminUpdateResponse {
+  int32 status_code = 1;
+  string message = 2;
+  map<string, int32> reloj_vectorial = 3;
+}
